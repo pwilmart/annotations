@@ -646,6 +646,7 @@ class ProteinAnnotator:
 
         self.rb1 = self.make_radiobutton('human', 1)
         self.rb2 = self.make_radiobutton('mouse', 2)
+        self.rb3 = self.make_radiobutton('arabidopsis', 3)
         
         self.rb_frame.pack(side=LEFT, fill=X, padx=5, pady=5)
                 
