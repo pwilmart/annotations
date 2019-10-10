@@ -6,8 +6,30 @@ original order. This program is designed to function as a companion to Excel so
 that annotations can be added along with any other processing needed to prepare
 PAW results files for clients.
 
+MIT License
+
+Copyright (c) 2019 Phillip Wilmarth, OHSU
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 written by Kyra Patton, OHSU, summer 2016.
-additional help by Phil Wilmarth, PSR Core, OHSU, 2016.
+additional changes by Phil Wilmarth, PSR Core, OHSU, 2016.
 
 Version 3-4:
     Debugged keywords processing, added some GUI borders.
@@ -20,15 +42,23 @@ Version 5:
 Version 6:
     Supports Python 2 or 3
     Added support for GO terms
-    -KP 8/10/2016    
+    -KP 8/10/2016
+
+    changed accessions from clipboard parsing
+    -PW 12/10/2018
+
+Renamed to "add_uniprot_annotations.py" for distribution on Github -PW 20191008
+    Changed some behavior to facilitate annotating more lists in one session
+    Works with 3-species DAT files (see "keywlist_download.py")
     
 To-Do:
-    Make KW and GO reports
     Add support for BLAST ortholog mapping
-    Implement CC -!- PATHWAY information and correlate with REACTOME info
     KW lines can wrap and then ECO codes don't get removed
        need to parse out all terms and put the lines together (10/6 PW)
-    
+
+Completed:
+    DONE - Make KW and GO reports
+    DONE - Implement CC -!- PATHWAY information and correlate with REACTOME info    
 """
 
 """Issue 6/22/2018:
@@ -36,14 +66,9 @@ Excel Mac 2016 seems to have a bunch of unicode junk at end of clipboard content
 The last read accession gets messed up. A blank cell at end of selection does not fix.
 Have to add a physical dummy accession. I was not getting good formatted data back on the
 clipboard for export.
+
+ISSUE SEEMS TO BE RESOLVED FROM MICROSOFT IN NEWER EXCEL VERSIONS.
 """
-# from __future__ import print_function # maybe not needed?
-try:
-    # python 3
-    from tkinter import *
-except ImportError:
-    # python 2
-    from Tkinter import *
 import os
 import sys
 import gzip
@@ -54,19 +79,23 @@ try:
 except ImportError:
     import pickle
 
+from tkinter import *
+from tkinter import filedialog
+
 import numpy as np
 import pandas as pd
 
 
 # module-wide function definitions
-def get_file(root, default_location=os.getcwd(), 
-             ext_list=[('All files', '*.*')], 
-             title_string="Select a file"):
-    """Dialog box to browse to a folder.  Returns folder path."""
+def get_file(default_location, ext_list=[('All files', '*.*')], title_string="Select a file"):
+    """Dialog box to browse to a folder.  Returns full file path."""
+    # set up GUI elements
+    root = Tk()
+    root.withdraw()
     try:
-        from tkinter import filedialog
-    except ImportError:
-        import tkFileDialog as filedialog
+        root.tk.call('console', 'hide')
+    except:
+        pass
 
     # check location
     if not os.path.exists(default_location):
@@ -74,22 +103,14 @@ def get_file(root, default_location=os.getcwd(),
         
     # create dialog box for file selection and return selection
     root.update()
-    return filedialog.askopenfilename(parent=root, initialdir=default_location,
-                                      filetypes=ext_list, title=title_string)
+    selection = filedialog.askopenfilename(parent=root, initialdir=default_location,
+                                           filetypes=ext_list, title=title_string)
+    return selection
     
 def get_folder(default_location, title_string=""):
-    """Dialog box to browse to a folder.  Returns full folder path.
-    Usage: full_folder_name = get_folder(default_location, [title]),
-        where "default_location" is a starting folder location,
-        "title_string" is an optional message to list in the dialog box,
-        and "full_folder_name" is the selected folder name (full path).
-    Written by Phil Wilmarth, 2008, 2016
-    """
-    import tkinter
-    from tkinter import filedialog
-    
+    """Dialog box to browse to a folder.  Returns full folder path."""    
     # set up GUI elements
-    root = tkinter.Tk()
+    root = Tk()
     root.withdraw()
     try:
         root.tk.call('console', 'hide')
@@ -400,7 +421,6 @@ class Annotations:
         for line in prot_rec:
             if line.startswith('DR   MGI;'):
                 self.mgi_acc = line[5:].split(';')[1].strip()
-#                self.mgi_acc = self.mgi_acc[4:]
                 self.mgi_gene = line[5:].split(';')[2].strip().rstrip('.')
                 return
         return "N/A"
@@ -410,42 +430,6 @@ class Annotations:
         prot_rec: a list of strings, protein record"""
         self.go.parse_GO_terms(prot_rec)
         return
-    
-#    def get_cc(self, prot_rec):
-#        """Get the CC lines
-#        prot_rec: a list of strings, protein record"""
-#        cc = {}     
-#        buff = []
-#        for line in prot_rec:
-#            line = self.eco.sub('', line)
-#            if line.startswith('CC   '):
-#                line = line[2:]
-#                if line.startswith('-!-') and buff:
-#                    category, desc = self._process_cc(buff)
-#                    cc[category] = desc
-#                    buff = []
-#                else:
-#                    buff.append(line)
-#            else:
-#                break
-#        category, desc = self._process_cc(buff) #process last of data
-#        cc[category] = desc
-#        self.cc = cc
-#        return
-#    
-#    def _process_cc(self, buff):
-#        """get_cc helper method
-#        buff: list of lines holding subcategory of CC description"""
-#        desc = ''
-#        category = ''
-#        for line in buff:
-#            if line.startswith('-!-'):
-#                line = line[7:]
-#                category = line.split(':')[0]
-#                desc += line[len(category):]
-#            else:
-#                desc += line
-#        return category, desc
 
     def get_cc(self, prot_rec):
         """Parses CC PATHWAY info."""
@@ -525,7 +509,10 @@ class PathWays:
             elif in_pathway and '-!-' not in line:
                 if line == 'CC      .':
                     continue
-                self.cc_string += line.split('CC   ')[1].lstrip() + ' '                
+                try:
+                    self.cc_string += line.split('CC   ')[1].lstrip() + ' '
+                except IndexError:
+                    break
         if self.cc_string.endswith(' '):
             self.cc_string = self.cc_string[:-1]
         return
@@ -579,10 +566,10 @@ class AnnotationPickle:
       """Container for parsed annotation dictionary of DAT file.
       Includes DAT file name, and DAT file creation date to test if pickle seems viable.
       """
-      def __init__(self, dbfile, dbdate, annotate_dict):
+      def __init__(self, dat_file, dat_date, annotate_dict):
           """Basic constructor."""
-          self.dbfile = dbfile
-          self.dbdate = dbdate
+          self.dat_file = dat_file
+          self.dat_date = dat_date
           self.annotate_dict = annotate_dict
           return
          
@@ -634,7 +621,7 @@ class ProteinAnnotator:
         self.b2 = self.make_toolbar_button('Parse DAT file', self.parse_dat_file, width=13)
         self.b3 = self.make_toolbar_button('Blast mapping', self.blast_mapping)
         self.b4 = self.make_toolbar_button('Add annotations', self.add_annotations)
-        self.b5 = self.make_toolbar_button('Clear', self.clear_screen, width=8)
+        self.b5 = self.make_toolbar_button('Reset', self.clear_data, width=8)
         self.b6 = self.make_toolbar_button('Help', self.print_help, width=8)
         self.b7 = self.make_toolbar_button('Quit', self.quit_me, width=8)
 
@@ -687,11 +674,15 @@ class ProteinAnnotator:
 
         # define the actual structures for the data
         self.accessions = []        # holds list of accessions
-        self.dbfile = None          # DAT file path and name
+        self.acc_read = False       # flag for if accessions are loaded
+        self.dat_file = None        # DAT file path and name
+        self.dat_read = False       # flag for if DAT file parsed
         self.default = os.getcwd()  # can set a default location here
         self._annotate_dict = {}    # maps all possible accessions to annotations
         self.annotations = []       # list of matching annotations 
         self.blast_map = {}         # optional BLAST ortholog mapping
+        self.blast_matches = {}     # some BLAST match information
+        self.blast_read = False     # flag for if BLAST map was read in
         
         # enter main loop
         self.root.mainloop()
@@ -724,33 +715,35 @@ class ProteinAnnotator:
         cb.pack(side=RIGHT, padx=5, pady=5)
         return(cb)    
 
-    def _parse_accessions(self, acc):
-        """Helper function to parse an accession.
-        acc: string; accession to be parsed"""
-        try:
-            acc = acc.split()[0]
-        except AttributeError: # might be a number instead of a string
-            return acc
-        if not acc or acc.lower() == 'accession' or acc == '(used':
-            return None
-        if acc.endswith('_family'):
-            acc = acc.replace('_family', '')
+    def _parse_accessions(self):
+        """Helper function to parse an accessions from clipboard."""
+        acc = []
+        for line in self.accessions:
+            line = line.strip().split()[0]
+            if not line or line.lower().startswith('accession') or line.lower() == 'acc':
+                continue
+            if line.endswith('_family'):
+                line = line.replace('_family', '')
+            acc.append(line)
         return acc
-        
+    
     # toolbar button functions
+
     def get_accessions(self):
         """Gets column of accessions from the clipboard."""
-        self.accessions = pd.read_clipboard(delim_whitespace=False)
+        self.accessions = self.root.clipboard_get()
+        self.accessions = self.accessions.splitlines()
         if len(self.accessions) == 0:
             self.clear_screen()
+            self.accessions = []
+            self.acc_read = False
             self.text.insert("1.0", 'WARNING: Clipboard was empty!')
-        if len(self.accessions.columns.values) != 1:
-            self.clear_screen()
-            self.text.insert("1.0", 'WARNING: accessions should be a single column!')
-            self.status.set("%s", 'Malformed data on clipboard')
+            self.status.set("%s", "%s accessions read from clipboard" % len(self.accessions))
+            return
 
         # parse the accessions
-        self.accessions = pd.DataFrame(self.accessions.iloc[:, 0].apply(self._parse_accessions))
+        self.accessions = pd.DataFrame({'Accession': self._parse_accessions()})
+        self.acc_read = True
 
         # echo the accessions to the screen
         self.clear_screen()
@@ -762,33 +755,42 @@ class ProteinAnnotator:
         """Get UniProt flat format text file (DAT file)."""        
         ext_list = [('GZip files', '*.gz'), ('DAT files', '*.dat')]
         message = 'Select a UniProt DAT file'
-        self.dbfile = get_file(self.root, self.default, ext_list, message)   # self.root is the root window
+        self.dat_file = get_file(self.default, ext_list, message)   # self.root is the root window
 
     def parse_dat_file(self):
         """Gets UniProt DB file and makes accession maps."""
-        # make sure dbfile has been selected
-        if self.dbfile is None or not os.path.exists(self.dbfile):
-            self.select_dat_file()
-
-        self.status.set("%s", "parsing DAT file or reloading")            
+        # browse to DAT file
+        self.select_dat_file()
+        self.status.set("%s", "parsing DAT file or reloading")
+        
         # look for pickled annotation dictionary and reload if it exists
-        if os.path.exists(self.dbfile + '.pk'):
-            pickled_anno = pickle.load(open(self.dbfile + '.pk', 'rb'))
-            if (pickled_anno.dbfile == self.dbfile and 
-                pickled_anno.dbdate == os.path.getctime(self.dbfile)):
+        if os.path.exists(self.dat_file + '.pk'):
+            read_pk = True
+            pickled_anno = pickle.load(open(self.dat_file + '.pk', 'rb'))
+            try:
+                if (pickled_anno.dat_file != self.dat_file or 
+                    pickled_anno.dat_date != os.path.getctime(self.dat_file)):
+                    read_pk = False
+            except AttributeError:
+                read_pk = False
+            if read_pk:
                 self._annotate_dict = pickled_anno.annotate_dict
                 count = int(len(self._annotate_dict) / 3)
-        else:
+        if not read_pk:
             count, self._annotate_dict = self._process_dat_records() # parse DAT file
+            
             # save the parsed file results for next time
-            pickled_anno = AnnotationPickle(self.dbfile, os.path.getctime(self.dbfile), 
+            pickled_anno = AnnotationPickle(self.dat_file, os.path.getctime(self.dat_file), 
                                             self._annotate_dict)
-            pickle.dump(pickled_anno, open(self.dbfile + '.pk', 'wb'), protocol = 2)    # protocol 2 to make compatible with python 2
+            pickle.dump(pickled_anno, open(self.dat_file + '.pk', 'wb'), protocol = 2)    # protocol 2 to make compatible with python 2
+
         print('DB count: %s, dict size: %s' % (count, len(self._annotate_dict)))
         print("DONE processing annotations")
-        # writeFile(self)   # optionally write annotations to separate files by category
-        self.acc_mapping()  # lookup the annotations for the accessions
-        self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
+        self.status.set("%s", 'DB count: %s, dict size: %s' % (count, len(self._annotate_dict)))
+        self.dat_read = True
+##        writeFile(self)   # optionally write annotations to separate files by category
+##        self.acc_mapping()  # lookup the annotations for the accessions
+##        self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
         
     # DAT file processing
     def _process_dat_records(self):
@@ -797,7 +799,7 @@ class ProteinAnnotator:
         count = 0
         dat_dict = {}
         try:
-            for line in gzip.open(self.dbfile, 'rt'):
+            for line in gzip.open(self.dat_file, 'rt'):
                 line = line.rstrip()
                 if line == '//':
                     annotations = Annotations()
@@ -810,7 +812,7 @@ class ProteinAnnotator:
                 else:
                     buff.append(line)
         except ValueError:
-            for line in gzip.open(self.dbfile):
+            for line in gzip.open(self.dat_file):
                 line = line.rstrip()
                 if line == '//':
                     annotations = Annotations()
@@ -823,7 +825,7 @@ class ProteinAnnotator:
                 else:
                     buff.append(line)
         except OSError:
-            for line in open(self.dbfile):
+            for line in open(self.dat_file):
                 line = line.rstrip()
                 if line == '//':
                     annotations = Annotations()
@@ -843,6 +845,7 @@ class ProteinAnnotator:
         db_dict: DAT file object"""
         # save annotations in a list (should be matched to self.accessions)
         self.annotations = []
+        fail_count = 0
         for acc in self.accessions.iloc[:, 0]:
             if acc in self.blast_map:
                 acc = self.blast_map[acc]   # work with ortholog accession if it exists
@@ -851,19 +854,18 @@ class ProteinAnnotator:
             else:
                 try:
                     temp_acc = acc.split('|')[2]
-                except IndexError or AttributeError:
-                    print('failed lookup:', acc)
-                    temp_acc = acc
-                except AttributeError:
+                except (IndexError, AttributeError):
                     print('failed lookup:', acc)
                     temp_acc = acc
                 if temp_acc in self._annotate_dict:
                     self.annotations.append(self._annotate_dict[temp_acc])
                 else:
                     # need a blank annotation object
+                    fail_count += 1
                     self.annotations.append(Annotations())
                      
         print('\nDone fetching annotations for %s accessions' % len(self.annotations))
+        print('...%d lookups failed' % fail_count)
         self.status.set("%s", "%s protein accessions looked up" % len(self.accessions))
         return self.annotations    
        
@@ -871,15 +873,35 @@ class ProteinAnnotator:
         """Use Blast ortholog mapping to model organism's DAT file"""
         ext_list = [('Text files', '*.txt')]
         message = 'Select a BLAST mapping file'
-        blast_map_file = get_file(self.root, self.default, ext_list, message)
+        blast_map_file = get_file(self.default, ext_list, message)
         if not blast_map_file: return   # cancel button response
         
         # read the mapping file
-        blast = pd.read_table(blast_map_file, skiprows=6)
-        blast = blast.dropna(thresh=4)
+        blast = pd.read_table(blast_map_file, skiprows=5)
+        blast = blast.dropna(thresh=4) # this should drop rows after the main table
+        
+        # drop some columns we do not need
+        try:
+            blast = blast.drop(['query_number', 'query_desc', 'query_aa', 'hit_aa',
+                                'alignment_aa', 'identity_aa', 'positive_aa',
+                                'pc_identity', 'pc_positive', 'bit_score'], axis=1)
+        except KeyError:
+            blast = blast.drop(['query_number', 'query_desc', 'query_aa', 'hit_aa',
+                                'alignment_aa', 'identity_aa', 'positive_aa',
+                                'pc_identity', 'pc_postive', 'bit_score'], axis=1)
+
+        # make the accession mapping dictionary 
         for query, hit in zip(blast['query_acc'], blast['hit_acc']):
             self.blast_map[query] = hit
+            
+        # save some of the BLAST results in a dictionary keyed by query_acc
+        blast_matches = {}
+        for row_tuple in blast.iterrows():
+            row = row_tuple[1]
+            self.blast_matches[row['query_acc']] = '\t'.join(row)
+            
         self.status.set("%s", "%s BLAST mappings read in" % len(self.blast_map))
+        self.blast_read = True
         return    
     
     def clear_screen(self):
@@ -892,7 +914,12 @@ class ProteinAnnotator:
         self.text.delete("1.0", END)
         self.root.clipboard_clear()
         self.root.clipboard_append("")
-        self.status.set("%s", "Data cleared")
+        self.dat_file = None
+        self.dat_read = False
+        self.accessions = []
+        self.acc_read = False
+        self.blast_read = False
+        self.status.set("%s", "Data and screen cleared")
     
     def print_help(self):
         """Prints some help info to the window."""
@@ -900,8 +927,8 @@ class ProteinAnnotator:
         help_text = \
 """Program add_protein_annotations.py, version 1.0
 
-Takes a list of protein accessions from a PAW results file (typically Excel) for human or
-mouse and adds additional annotations extracted from UniProt (Swiss-Prot) DAT files.
+Takes a list of protein accessions from a PAW results file (typically Excel) for human,
+mouse, or arabidopsis and adds additional annotations from UniProt (Swiss-Prot) DAT files.
 
 "Get accessions" => reads UniProt accessions from the clipboard and echos them to the screen.
 
@@ -913,38 +940,57 @@ from non-human or non-mouse organisms to human or mouse orthologs.
 "Add annotations" => maps the UniPort accessions from the clipboard to the
 annotations from the UniProt DAT file. Writes results to screen and clipboard.
 
-"Clear" => clears the text window. Data should remain intact.
+"Clear" => clears data and the screen text window.
 
 "Help" => prints this information.
 
 "Quit" => ends the application.
 
-Written by Kyra Patton, OHSU, 2016."""
+Written by Kyra Patton, OHSU, 2016.
+        and Phil Wilmarth, OHSU, 2016, 2019"""
         self.text.insert("1.0", help_text)
         self.status.set("%s", "Help Text")
 
     def print_data(self):
-        """Echoes the data from the clipboard to the window
-        """
+        """Echoes the data from the clipboard to the window."""
         self.text.insert(CURRENT, self.accessions.to_string())
-        self.text.insert(CURRENT, '\n')                
+        self.text.insert(CURRENT, '\n')
+
+    def print_string(self, string):
+        self.text.insert(CURRENT, string)
+        self.text.insert(CURRENT, '\n')        
 
     def add_annotations(self):
         """Prints annotations to the window."""
+        # make sure we have accessions and have parsed a DAT file
+        return_flag = False
         self.clear_screen()
+        if not self.acc_read:
+            self.print_string('Please load some accessions from the clipboard!')
+            return_flag = True
+        if not self.dat_read:
+            self.print_string('Please parse a DAT file!')
+            return_flag = True
+        if return_flag:
+            self.status.set("%s", "Annotation lookup failed")
+            return
+
+        # lookup the annotations for the accessions
+        self.acc_mapping()
+        print("%s protein annotation records parsed" % len(self.annotations))
+        self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
+
+        # format the annotation table
         annot_table = AnnotationTable(self)
         str_table = annot_table.table.to_csv(sep='\t')        
         self.text.insert("1.0", str_table)
         self.root.clipboard_clear()
         self.root.clipboard_append(annot_table.table.to_csv(sep='\t', line_terminator='\r'))
-#        str_table = annot_table.table.to_string()
-#        annot_table.table.to_clipboard()
-        self.status.set("%s", "Annotations printed here and to clipboard")
+        self.status.set("%s", "Annotations shown above and written to clipboard")
         print('Annotations added for %s proteins' % len(self.accessions))
         
     def quit_me(self):
-        """Quits the application
-        """
+        """Quits the application."""
         self.status.set("%s", "Bye")
         self.root.withdraw()
         self.root.update_idletasks()
@@ -956,7 +1002,7 @@ class AnnotationTable:
     def __init__(self, parent):
         """parent: calling object"""
         self.parent = parent                        # pointer to calling object
-        self.dbfile = self.parent.dbfile            # Swiss-Prot DAT file
+        self.dat_file = self.parent.dat_file        # Swiss-Prot DAT file
         self.accessions = self.parent.accessions    # accessions to be annotated
         self.annotations = self.parent.annotations  # annotations from DAT file
         self.reports_folder = None                  # folder to write rports to
@@ -995,7 +1041,6 @@ class AnnotationTable:
             df_dict['Accession'].append(anno.accession)
             df_dict['Identifier'].append(anno.identifier)
             df_dict['Other Accessions'].append(anno.other_accessions)
-#            df_dict['Fasta Accession'].append(anno.fasta_accession)
             if anno.gene:
                 df_dict['UniProt Gene Name'].append('="%s"' % anno.gene)
             else:
@@ -1052,7 +1097,7 @@ class AnnotationTable:
         """Makes table of keyword annotations."""
         self.kw = KeyWords()
         try:
-            self.kw.parse_file(os.path.join(os.path.dirname(self.dbfile), 'keywlist.txt'))  # parse keyword definitions file
+            self.kw.parse_file(os.path.join(os.path.dirname(self.dat_file), 'keywlist.txt'))  # parse keyword definitions file
         except:
             """Need to browse to file if not found!"""
             print('\nWARNING: key word list definition file not found\n')
