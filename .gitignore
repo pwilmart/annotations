@@ -3,3 +3,4 @@ Mostly Python and Office file exclusions. -PW
 *.pyc
 
 /old_test_versions
+/images/screen_shots

@@ -857,16 +857,18 @@ class ProteinAnnotator:
             if acc in self._annotate_dict:
                 self.annotations.append(self._annotate_dict[acc])
             else:
-                try:
-                    temp_acc = acc.split('|')[2]
-                except (IndexError, AttributeError):
-                    print('failed lookup:', acc)
-                    temp_acc = acc
+                acc_parts = acc.split('|')
+                if len(acc_parts) == 3:     # this is assuming UniProt format
+                    if acc_parts[2] in self._annotate_dict:
+                        temp_acc = acc_parts[2]
+                    else:
+                        temp_acc = acc_parts[1]
                 if temp_acc in self._annotate_dict:
                     self.annotations.append(self._annotate_dict[temp_acc])
                 else:
-                    # need a blank annotation object
+                    print('failed lookup:', acc)
                     fail_count += 1
+                    # need a blank annotation object
                     self.annotations.append(Annotations())
                      
         print('\nDone fetching annotations for %s accessions' % len(self.annotations))
@@ -893,16 +895,28 @@ class ProteinAnnotator:
 
         blast_brief = blast[keep]
 
-        # make the accession mapping dictionary 
+        # make the accession mapping dictionary (allow for parsed accessions) 
         for query, hit in zip(blast_brief['query_acc'], blast_brief['hit_acc']):
             self.blast_map[query] = hit
+            if len(query.split('|')) == 3:     # UniProt format
+                   self.blast_map[query.split('|')][1] = hit
+                   self.blast_map[query.split('|')][2] = hit
+            if (len(query.split('|')) == 1) and ('.' in query): # NCBI and Ensembl format
+                self.blast_map[query.split('.')[0]] = hit
+            
             
         # save some of the BLAST results in a dictionary keyed by query_acc
         blast_matches = {}
         for row_tuple in blast_brief.iterrows():
             row = row_tuple[1]
+            acc = row['query_acc']
             self.blast_matches[row['query_acc']] = [str(x) for x in row]
-
+            if len(acc.split('|')) == 3:     # UniProt format
+                   self.blast_matches[acc.split('|')][1] = [str(x) for x in row]
+                   self.blast_matches[acc.split('|')][2] = [str(x) for x in row]
+            if (len(acc.split('|')) == 1) and ('.' in acc): # NCBI and Ensembl format
+                self.blast_matches[acc.split('.')[0]] = [str(x) for x in row]
+                
         # organize by accession list (if loaded from clipboard)
         if self.acc_read:
             keys = list(self.accessions['Accession'])
@@ -916,6 +930,8 @@ class ProteinAnnotator:
                 rows.append([key] + self.blast_matches[key])
             except KeyError:
                 rows.append([key, 'NA', 'NA', 'NA', 'NA', 'NA'])
+
+        # make a pandas dataframe
         self.blast_table = pd.DataFrame(rows, columns = ['Index', 'query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status'])
 
         # write BLAST results to screen and cliboard
@@ -957,12 +973,12 @@ mouse, or arabidopsis and adds additional annotations from UniProt (Swiss-Prot) 
 "Parse DAT file" => parses a selected UniProt DAT file and extracts annotations of interest.
 
 "Blast mapping" => uses ortholog mapping information from BLAST to bootstrap proteins
-from non-human or non-mouse organisms to human or mouse orthologs.
+from non-model organisms to human, mouse, or arabidopsis orthologs.
 
 "Add annotations" => maps the UniPort accessions from the clipboard to the
 annotations from the UniProt DAT file. Writes results to screen and clipboard.
 
-"Clear" => clears data and the screen text window.
+"Reset" => clears data and the screen text window.
 
 "Help" => prints this information.
 
