@@ -51,14 +51,14 @@ Renamed to "add_uniprot_annotations.py" for distribution on Github -PW 20191008
     Changed some behavior to facilitate annotating more lists in one session
     Works with 3-species DAT files (see "keywlist_download.py")
     
-To-Do:
-    Add support for BLAST ortholog mapping
+To-Do:    
     KW lines can wrap and then ECO codes don't get removed
        need to parse out all terms and put the lines together (10/6 PW)
 
 Completed:
     DONE - Make KW and GO reports
-    DONE - Implement CC -!- PATHWAY information and correlate with REACTOME info    
+    DONE - Implement CC -!- PATHWAY information and correlate with REACTOME info
+    DONE - Add support for BLAST ortholog mapping
 """
 
 """Issue 6/22/2018:
@@ -607,12 +607,14 @@ class ProteinAnnotator:
         self.kw_var = IntVar()
         self.pw_var = IntVar()
         self.go_var = IntVar()
+        self.sf_var = IntVar()
         
         # set default values
         self.radio_var.set(1)
         self.kw_var.set(1)
-        self.pw_var.set(0)
-        self.go_var.set(0)
+        self.pw_var.set(1)
+        self.go_var.set(1)
+        self.sf_var.set(0)
         
         # create a button toolbar
         self.toolbar = Frame(self.myFrame)
@@ -640,9 +642,13 @@ class ProteinAnnotator:
         self.cb_frame = Frame(self.option_bar, bd=2, relief=SUNKEN)  # checkboxes frame
 
         self.options = IntVar()        
-        self.cb1 = self.make_checkbutton('Keywords', self.kw_var)
-        self.cb2 = self.make_checkbutton('GO Terms', self.go_var)
+        self.cb4 = self.make_checkbutton('Summary Files', self.sf_var)
         self.cb3 = self.make_checkbutton('Pathways', self.pw_var)
+        self.cb2 = self.make_checkbutton('GO Terms', self.go_var)
+        self.cb1 = self.make_checkbutton('Keywords', self.kw_var)
+
+
+
         
         self.cb_frame.pack(side=RIGHT, fill=X)
         self.option_bar.pack(side=TOP, fill=X, padx=5, pady=5)
@@ -746,8 +752,7 @@ class ProteinAnnotator:
         self.acc_read = True
 
         # echo the accessions to the screen
-        self.clear_screen()
-        self.print_data()
+        self.echo_dataframe(self.accessions)
         self.status.set("%s", "%s accessions read from clipboard" % len(self.accessions))
         return
 
@@ -881,26 +886,43 @@ class ProteinAnnotator:
         blast = blast.dropna(thresh=4) # this should drop rows after the main table
         
         # drop some columns we do not need
-        try:
-            blast = blast.drop(['query_number', 'query_desc', 'query_aa', 'hit_aa',
-                                'alignment_aa', 'identity_aa', 'positive_aa',
-                                'pc_identity', 'pc_positive', 'bit_score'], axis=1)
-        except KeyError:
-            blast = blast.drop(['query_number', 'query_desc', 'query_aa', 'hit_aa',
-                                'alignment_aa', 'identity_aa', 'positive_aa',
-                                'pc_identity', 'pc_postive', 'bit_score'], axis=1)
+        if 'match_status' in blast.columns:
+            keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status']
+        else:
+            keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'status']   # older BLAST map files
+
+        blast_brief = blast[keep]
 
         # make the accession mapping dictionary 
-        for query, hit in zip(blast['query_acc'], blast['hit_acc']):
+        for query, hit in zip(blast_brief['query_acc'], blast_brief['hit_acc']):
             self.blast_map[query] = hit
             
         # save some of the BLAST results in a dictionary keyed by query_acc
         blast_matches = {}
-        for row_tuple in blast.iterrows():
+        for row_tuple in blast_brief.iterrows():
             row = row_tuple[1]
-            self.blast_matches[row['query_acc']] = '\t'.join(row)
-            
-        self.status.set("%s", "%s BLAST mappings read in" % len(self.blast_map))
+            self.blast_matches[row['query_acc']] = [str(x) for x in row]
+
+        # organize by accession list (if loaded from clipboard)
+        if self.acc_read:
+            keys = list(self.accessions['Accession'])
+        else:
+            keys = self.blast_matches.keys()
+
+        # create a pandas dataframe for the BLAST data
+        rows = []
+        for key in keys:
+            try:
+                rows.append([key] + self.blast_matches[key])
+            except KeyError:
+                rows.append([key, 'NA', 'NA', 'NA', 'NA', 'NA'])
+        self.blast_table = pd.DataFrame(rows, columns = ['Index', 'query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status'])
+
+        # write BLAST results to screen and cliboard
+        self.echo_dataframe(self.blast_table)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.blast_table.to_csv(sep='\t', line_terminator='\r', index=False))
+        self.status.set("%s", "%s BLAST mappings read in (echoed to screen and clipboard)" % len(self.blast_map))
         self.blast_read = True
         return    
     
@@ -947,13 +969,15 @@ annotations from the UniProt DAT file. Writes results to screen and clipboard.
 "Quit" => ends the application.
 
 Written by Kyra Patton, OHSU, 2016.
-        and Phil Wilmarth, OHSU, 2016, 2019"""
+
+(and Phil Wilmarth, OHSU, 2016-2019)"""
         self.text.insert("1.0", help_text)
         self.status.set("%s", "Help Text")
 
-    def print_data(self):
+    def echo_dataframe(self, frame):
         """Echoes the data from the clipboard to the window."""
-        self.text.insert(CURRENT, self.accessions.to_string())
+        self.clear_screen()
+        self.text.insert(CURRENT, frame.to_string(index=False))
         self.text.insert(CURRENT, '\n')
 
     def print_string(self, string):
@@ -980,12 +1004,16 @@ Written by Kyra Patton, OHSU, 2016.
         print("%s protein annotation records parsed" % len(self.annotations))
         self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
 
-        # format the annotation table
-        annot_table = AnnotationTable(self)
-        str_table = annot_table.table.to_csv(sep='\t')        
-        self.text.insert("1.0", str_table)
+        # format the annotation table (with or without the BLAST mapping info)
+        if self.blast_read:
+            annot_table = pd.merge(self.blast_table, AnnotationTable(self).table, on='Index')
+        else:
+            annot_table = AnnotationTable(self).table
+
+        # write annotations to screen and clipboard
+        self.echo_dataframe(annot_table)
         self.root.clipboard_clear()
-        self.root.clipboard_append(annot_table.table.to_csv(sep='\t', line_terminator='\r'))
+        self.root.clipboard_append(annot_table.to_csv(sep='\t', line_terminator='\r', index=False))
         self.status.set("%s", "Annotations shown above and written to clipboard")
         print('Annotations added for %s proteins' % len(self.accessions))
         
@@ -1103,8 +1131,9 @@ class AnnotationTable:
             print('\nWARNING: key word list definition file not found\n')
             return
             
-        # analyze the keyword frequencies and assciated proteins
-        self.analyze_keywords()
+        # analyze the keyword frequencies and associated proteins
+        if self.parent.sf_var.get() == 1:
+            self.analyze_keywords()
             
         # put the keywords into their 10 categories
         keywords_by_category = []
@@ -1164,7 +1193,8 @@ class AnnotationTable:
         self.pw_table[self.pw_table == ''] = 'na'
         
         # analyze and write report of Reactome pathways
-        self.analyze_pathways()
+        if self.parent.sf_var.get() == 1:
+            self.analyze_pathways()
         return
         
     def analyze_pathways(self):
@@ -1223,7 +1253,8 @@ class AnnotationTable:
         self.go_table[self.go_table == ''] = 'na'
         
         # analyze and write report of GO terms
-        self.analyze_GOTerms()
+        if self.parent.sf_var.get() == 1:
+            self.analyze_GOTerms()
         return
         
     def analyze_GOTerms(self):
