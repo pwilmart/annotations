@@ -878,6 +878,13 @@ class ProteinAnnotator:
        
     def blast_mapping(self):
         """Use Blast ortholog mapping to model organism's DAT file"""
+        # check is accessions have been loaded
+        if not self.acc_read:
+            self.clear_screen()
+            self.print_string('Please load some accessions from the clipboard!')
+            return
+
+        # browse to BLAST map TXT file
         ext_list = [('Text files', '*.txt')]
         message = 'Select a BLAST mapping file'
         blast_map_file = get_file(self.default, ext_list, message)

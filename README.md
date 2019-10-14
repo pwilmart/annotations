@@ -2,6 +2,8 @@
 
 GUI Python script that adds rich UniProt annotations to proteomics results files.
 
+Written by **Kyra Patton**, OHUS summer research project, 2016
+
 > The program requires a 3.X version of Python which can be obtained from www.python.org or from a scientific python distribution like [Anaconda](https://www.anaconda.com/distribution/). If you do the standard Python distribution, you will need to install [scientific Python extensions](https://scipy.org/install.html).
 
 ## UniProt annotations
@@ -10,11 +12,13 @@ The Swiss-Prot manually annotated entries that you view at the [UniProt knowledg
 
 ![sprot DAT files](images/01-sprot_DAT_files.png)
 
+Part of a mouse DAT file (above). Descriptions of all of the fields and file format can be found in the main UniProt documentation:
+
 ![DAT file manual](images/02-DAT_file_manual.png)
 
-There are some limitations to these annotation resources. The only UniProt proteins that are properly annotated are the manually curated entries (Reviewed sequences or Swiss-Prot entries). There are not many model systems that have relatively complete annotated proteomes. For practical purposes this ends up being human, mouse, and arabidopsis (E. coli or yeast could probably also be included).
+There are some limitations to these annotation resources. The only UniProt proteins that are properly annotated are the manually curated entries (Reviewed sequences or Swiss-Prot entries). There are not many model systems that have relatively complete annotated proteomes. For practical purposes, this ends up being human, mouse, or arabidopsis (E. coli or yeast could probably also be included).
 
-The UniProt DAT files can be downloaded via the REST API after restricting to human, mouse, or arabidopsis species, restricting to Reviewed sequences, and Downloading in Text format. The files are quite large, even in compressed format.
+Individual UniProt DAT files can be downloaded via the REST API after restricting to human, mouse, or arabidopsis species, restricting to Reviewed sequences, and Downloading in Text format. The files are quite large, even in compressed format.
 
 It is also possible to use the `keywlist_download.py` script to get the DAT records for all three species. The Swiss-Prot entries are relatively stable and updating the DAT file should only be needed a couple of time a year. The `keywlist_download.py` script downloads the entire UniProt Swiss-Prot DAT file (about 700MB compressed) from the FTP site, extracts the records for the three species, and also downloads the [UniProt keyword list](https://www.uniprot.org/keywords/).
 
@@ -32,7 +36,7 @@ The DAT files mentioned above can be used for many different sets of results, an
 
 ## Example session
 
-Dr. Ben Neely from the Marine Biochemical Sciences Group at NIST Charleston shared some [narwhal](https://en.wikipedia.org/wiki/Narwhal) serum proteomics results from a [Mascot](http://www.matrixscience.com/) search. While narwhal has an NCBI RefSeq FASTA protein database available, its level of annotation will make investigating identified proteins difficult. The [PAW_BLAST scripts](https://github.com/pwilmart/PAW_BLAST) were used to find the human orthologs. The `keywlist_download.py` script was run to download the necessary annotation files. There is a `2019-4-9_NW1_serum_F002042_cRAP filtered.csv` file that was opened in Excel and saved as `2019-4-9_NW1_serum_F002042_cRAP filtered.xlsx`. We will take the 275 identified proteins and get annotations for their human orthologs.  
+Dr. Ben Neely from the Marine Biochemical Sciences Group at [NIST Charleston](https://www.nist.gov/mml/hollings-marine-laboratory) shared some [narwhal](https://en.wikipedia.org/wiki/Narwhal) serum proteomics results from a [Mascot](http://www.matrixscience.com/) search. While narwhal has an NCBI RefSeq FASTA protein database available, its level of annotation may make investigating identified proteins more difficult. The [PAW_BLAST scripts](https://github.com/pwilmart/PAW_BLAST) were used to find the human orthologs. The `keywlist_download.py` script was run to download the necessary annotation files. There is a `2019-4-9_NW1_serum_F002042_cRAP-filtered.csv` file that was opened in Excel and saved as `2019-4-9_NW1_serum_F002042_cRAP-filtered.xlsx`. We will take the 275 identified proteins and get annotations for their human orthologs.  
 
 
 ![starting data](images/03-starting_data.png)
@@ -45,12 +49,12 @@ The column of accessions for the 275 proteins was copied to a new tab for this e
 
 When the `add-uniprot_annotations.py` script is run, a tkinter GUI window will open. The script has a defined order of actions:
 
-1. read accessions from the data_to_clipboard
+1. read accessions from the system clipboard
 1. read annotations from a Swiss-Prot DAT file
-1. [optionally] read in a BLAST mapping files
+1. [optionally] read in a BLAST mapping file
 1. select annotation species
 1. select annotation categories
-1. select some additional output summary files or not
+1. select additional output summary files or not
 
 The script puts its annotation results back onto the system clipboard so that they can be added to the Excel sheet.
 
@@ -58,13 +62,14 @@ The script puts its annotation results back onto the system clipboard so that th
 
 ![data to clipboard](images/05-data_to_clipboard.png)
 
-We need to go back to the spreadsheet and select the column of accessions. The selected range should be just the accessions and [optionally] the header cell. Copy the selected cells to the clipboard. Split view can make selecting the cells in along column easier.
+We need to go back to the spreadsheet and select the column of accessions. The selected range should be just the accessions and [optionally] the header cell. Copy the selected cells to the clipboard. Split view can make selecting the cells in a long column easier.
 
 ---
 
 ![load accessions](images/06-load_accessions.png)
 
-Go back to GUI window and click the `Get accessions` button. The accessions should appear in the main screen area and the status bar will tell you how many accessions were read. This is a good time to select the species that you want get annotations for (or the species that you did the ortholog mapping to). Note: human and mouse have different sorts of annotations. Human is very well studied for disease-related questions. Mice can be experimented with, so there is information about development and other things for mice that we may not have for human. Arapidopsis is available for plant systems.
+Go back to the GUI window and click the `Get accessions` button. The accessions should appear in the main screen area and the status bar will tell you how many accessions were read. This is a good time to select the species that you want to get annotations for (or the species that you did the ortholog mapping to).
+> **Note:** human and mouse have different sorts of annotations. Human is very well studied for disease-related questions. Mice can be experimented with, so there is information about development and other things for mice that we may not have for human. Arapidopsis is available for plant systems.
 
 ---
 
@@ -92,38 +97,42 @@ If you are working with non-human, non-mouse, or non-arabidopsis organisms, ther
 
 The information from the BLAST map will be shown in the screen. For this example, we have the 275 identified proteins and some information about their human orthologs. The table is also written to the clipboard so that ortholog information can be used in other ways.
 
-The next step will add the annotation information. The types of annotation information (keywords, GO terms, and/or pathways) that are desired should be checked. The `Summary Files` checkbox will create reports of annotations in any of the checked categories where the tables are organized by annotation term instead of by protein. A location where the reports will be written must be supplied in a dialog box before the annotations will be added.
+The next step will add the annotation information. The types of annotation information (keywords, GO terms, and/or pathways) that are desired should be checked. The `Summary Files` checkbox will create reports of annotations in any of the checked categories where the tables are organized by annotation term instead of by protein. A location where the reports will be written must be supplied in a dialog box before the annotations will be added. Examples of these files (`GOTerms_report.txt`, `keyword_report.txt`, and `pathway_report.txt`) are in the repository.
 
 ---
 
 ![add annotations](images/11-add_annotations.png)
 
-Clicking the `Add annotations` button will make a table of the original accessions and the desired annotations. If a BLAST map was used, there will be some additional columns that have some BLAST results. Mouse has extra [MGI](http://www.informatics.jax.org/) database information. The annotations are written to both the screen and the system clipboard.
+Clicking the `Add annotations` button will create a table of the original accessions and their associated annotations. If a BLAST map was used, there will be additional columns that have BLAST results. Mouse has extra [MGI database](http://www.informatics.jax.org/) information. The annotations are written to both the screen and the system clipboard.
 
 ---
 
 ![Excel after annotations](images/12-Excel_after_results.png)
 
-To add the annotation information back to the proteomics results, you need to select a single cell in the header row that is to the right of any existing columns. Several new columns of data will be added when the results on the clipboard are pasted back into the sheet. An `Index` column is included in the results that should be the same as the starting accessions. This allows for double checking that all of the rows in the annotations are still in sync with the proteomics results rows. Excel has some restrictions on paste operations. The sheet cannot have any hidden rows, for example. The script can be run again pretty easily. A little trial and error should make it clear in what state the sheet needs to be in to get things to work.
+To add the annotation information back to the proteomics results, you need to select a single cell in the header row that is to the right of any existing columns. Several new columns of data will be added when the results on the clipboard are **pasted** back into the sheet. An `Index` column is included in the results that should be the same as the initial accessions column. This allows for double checking that all of the rows in the annotations are still in sync with the proteomics results rows. Excel has some restrictions on paste operations. The sheet cannot have any hidden rows, for example. The script can be run again if Excel protests (after fixing the underlying issue). A little trial and error should make it clear about what state the spreadsheet needs to be in to get things to work.
 
 ---
 
 ![Excel after formatting 1](images/13-Excel_after_formatting_1.png)
 
-After the annotation columns are added to one or more tabs (depending on you sheet layout), some sheet formatting may be in order. I like to have the header row in bold and I use column filters a lot. Resizing column widths so that information can be more easily read is often needed. Hyperlink columns can be formatted as hyperlinks, etc. Coloring cells can also be handy. This region of the sheet shows the BLAST information.
+After the annotation columns are added to one or more tabs (depending on your sheet layout), some sheet formatting may be in order. I like to have the header row in bold and I use column filters a lot. Resizing column widths so that information can be more easily read is often needed. Hyperlink columns can be formatted as hyperlinks, etc. Coloring cells can also be handy. The region of the sheet (above) shows the BLAST information.
 
 ---
 
 ![Excel after formatting 2](images/14-Excel_after_formatting_2.png)
 
-This region of the sheet has some of the Swiss-Prot annotation information for the human orthologs.
+This region of the sheet has some of the Swiss-Prot annotation information for the human orthologs. The spreadsheet in the repository has a `ReadMe` tab with descriptions of all of the annotation columns.
 
 ---
 
 ## UniProt keywords
 
-One overlooked feature of the Swiss-Prot manual annotation is the keywords. This is a controlled vocabulary of about 1200 terms:
+An overlooked feature of the Swiss-Prot manual annotation process is the keywords. This is a controlled vocabulary of about 1200 terms:
 
 ![UniProt keywords](images/15-UniProt_keywords.png)
 
-The terms are added by the curators and they fall into 10 categories. These terms can be much easier to make sense of than the more extensive (and redundant) GO terms. All keywords and keywords in the 10 categories are in the annotation reports if the `Keywords` checkbox is selected.
+The terms are added by the curators and they fall into 10 categories. These terms can be much easier to make sense of than the more extensive (and redundant) GO terms. Keywords in the 10 categories are in the annotation reports if the `Keywords` checkbox is selected.
+
+---
+
+-Phil Wilmarth, OHSU, October 2019.
