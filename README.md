@@ -2,7 +2,7 @@
 
 GUI Python script that adds rich UniProt annotations to proteomics results files.
 
-Written by **Kyra Patton**, OHUS summer research project, 2016
+Written by **Kyra Patton**, OHSU summer research project, 2016
 
 > The program requires a 3.X version of Python which can be obtained from www.python.org or from a scientific python distribution like [Anaconda](https://www.anaconda.com/distribution/). If you do the standard Python distribution, you will need to install [scientific Python extensions](https://scipy.org/install.html).
 
