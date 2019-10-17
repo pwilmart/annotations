@@ -161,10 +161,10 @@ if not location:
     sys.exit()
             
 # get key word list contents
-#fetch_keywlist(location)
+fetch_keywlist(location)
 
 # get UniProt full Swiss-Prot records
-#fetch_sprot_dat(location)
+fetch_sprot_dat(location)
 
 # filter out the human, mouse, or arabidopsis records
 out_lines = parse_sprot_dat(location)
