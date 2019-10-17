@@ -892,7 +892,7 @@ class ProteinAnnotator:
         if not blast_map_file: return   # cancel button response
         
         # read the mapping file
-        blast = pd.read_table(blast_map_file, skiprows=5)
+        blast = pd.read_csv(blast_map_file, sep='\t', skiprows=5)
         blast = blast.dropna(thresh=4) # this should drop rows after the main table
         
         # drop some columns we do not need
