@@ -769,6 +769,7 @@ class ProteinAnnotator:
         self.status.set("%s", "parsing DAT file or reloading")
         
         # look for pickled annotation dictionary and reload if it exists
+        read_pk = False
         if os.path.exists(self.dat_file + '.pk'):
             read_pk = True
             pickled_anno = pickle.load(open(self.dat_file + '.pk', 'rb'))
