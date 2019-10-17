@@ -858,6 +858,7 @@ class ProteinAnnotator:
             if acc in self._annotate_dict:
                 self.annotations.append(self._annotate_dict[acc])
             else:
+                temp_acc = acc
                 acc_parts = acc.split('|')
                 if len(acc_parts) == 3:     # this is assuming UniProt format
                     if acc_parts[2] in self._annotate_dict:
