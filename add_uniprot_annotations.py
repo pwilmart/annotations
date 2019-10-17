@@ -907,8 +907,8 @@ class ProteinAnnotator:
         for query, hit in zip(blast_brief['query_acc'], blast_brief['hit_acc']):
             self.blast_map[query] = hit
             if len(query.split('|')) == 3:     # UniProt format
-                   self.blast_map[query.split('|')][1] = hit
-                   self.blast_map[query.split('|')][2] = hit
+                   self.blast_map[query.split('|')[1]] = hit
+                   self.blast_map[query.split('|')[2]] = hit
             if (len(query.split('|')) == 1) and ('.' in query): # NCBI and Ensembl format
                 self.blast_map[query.split('.')[0]] = hit
             
@@ -920,8 +920,8 @@ class ProteinAnnotator:
             acc = row['query_acc']
             self.blast_matches[row['query_acc']] = [str(x) for x in row]
             if len(acc.split('|')) == 3:     # UniProt format
-                   self.blast_matches[acc.split('|')][1] = [str(x) for x in row]
-                   self.blast_matches[acc.split('|')][2] = [str(x) for x in row]
+                   self.blast_matches[acc.split('|')[1]] = [str(x) for x in row]
+                   self.blast_matches[acc.split('|')[2]] = [str(x) for x in row]
             if (len(acc.split('|')) == 1) and ('.' in acc): # NCBI and Ensembl format
                 self.blast_matches[acc.split('.')[0]] = [str(x) for x in row]
                 
