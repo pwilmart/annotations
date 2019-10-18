@@ -261,7 +261,7 @@ class Annotations:
         self.name = None            # primary protein name
         self.other_names = []       # alternative protein names
         self.flags = []             # flags from DE lines
-        self.gene = None              # UniProt gene name
+        self.gene = None            # UniProt gene name
         self.other_genes = []       # other gene synonyms
         self.os = None              # species name
         self.ox = None              # taxonomy number
@@ -679,7 +679,7 @@ class ProteinAnnotator:
         self.print_help()
 
         # define the actual structures for the data
-        self.accessions = []        # holds list of accessions
+        self.accessions = None      # holds list of accessions
         self.acc_read = False       # flag for if accessions are loaded
         self.dat_file = None        # DAT file path and name
         self.dat_read = False       # flag for if DAT file parsed
@@ -687,7 +687,8 @@ class ProteinAnnotator:
         self._annotate_dict = {}    # maps all possible accessions to annotations
         self.annotations = []       # list of matching annotations 
         self.blast_map = {}         # optional BLAST ortholog mapping
-        self.blast_matches = {}     # some BLAST match information
+        self.blast_brief = {}       # condensed BLAST information
+        self.blast_matches = {}     # BLAST match information for loaded accessions
         self.blast_read = False     # flag for if BLAST map was read in
         
         # enter main loop
@@ -721,12 +722,13 @@ class ProteinAnnotator:
         cb.pack(side=RIGHT, padx=5, pady=5)
         return(cb)    
 
-    def _parse_accessions(self):
+    def _parse_accessions(self, clipboard):
         """Helper function to parse an accessions from clipboard."""
+        headers = ['ACC', 'ACCESSION', 'ACCESSIONS', 'QUERY_ACC', 'HIT_ACC']
         acc = []
-        for line in self.accessions:
+        for line in clipboard:
             line = line.strip().split()[0]
-            if not line or line.lower().startswith('accession') or line.lower() == 'acc':
+            if not line or line.upper() in headers:
                 continue
             if line.endswith('_family'):
                 line = line.replace('_family', '')
@@ -737,18 +739,25 @@ class ProteinAnnotator:
 
     def get_accessions(self):
         """Gets column of accessions from the clipboard."""
-        self.accessions = self.root.clipboard_get()
-        self.accessions = self.accessions.splitlines()
-        if len(self.accessions) == 0:
+        try:
+            clipboard = self.root.clipboard_get()
+        except:
+            clipboard = None
+        clipboard = clipboard.splitlines()
+
+        # parse accessions
+        accessions = self._parse_accessions(clipboard)
+        
+        if len(accessions) == 0:
             self.clear_screen()
-            self.accessions = []
+            accessions = []
             self.acc_read = False
             self.text.insert("1.0", 'WARNING: Clipboard was empty!')
-            self.status.set("%s", "%s accessions read from clipboard" % len(self.accessions))
+            self.status.set("%s", 'WARNING: Clipboard was empty!')
             return
 
-        # parse the accessions
-        self.accessions = pd.DataFrame({'Accession': self._parse_accessions()})
+        # make accessions table
+        self.accessions = pd.DataFrame({'Accession': accessions})
         self.acc_read = True
 
         # echo the accessions to the screen
@@ -766,12 +775,12 @@ class ProteinAnnotator:
         """Gets UniProt DB file and makes accession maps."""
         # browse to DAT file
         self.select_dat_file()
-        self.status.set("%s", "parsing DAT file or reloading")
         
         # look for pickled annotation dictionary and reload if it exists
         read_pk = False
         if os.path.exists(self.dat_file + '.pk'):
             read_pk = True
+            self.status.set("%s", "reloading DAT file from pickle")
             pickled_anno = pickle.load(open(self.dat_file + '.pk', 'rb'))
             try:
                 if (pickled_anno.dat_file != self.dat_file or 
@@ -783,8 +792,9 @@ class ProteinAnnotator:
                 self._annotate_dict = pickled_anno.annotate_dict
                 count = int(len(self._annotate_dict) / 3)
         if not read_pk:
+            self.status.set("%s", "parsing large DAT file (be patient)")
             count, self._annotate_dict = self._process_dat_records() # parse DAT file
-            
+                        
             # save the parsed file results for next time
             pickled_anno = AnnotationPickle(self.dat_file, os.path.getctime(self.dat_file), 
                                             self._annotate_dict)
@@ -846,9 +856,136 @@ class ProteinAnnotator:
             
         return count, dat_dict
                
+    def blast_mapping(self):
+        """Use Blast ortholog mapping to model organism's DAT file"""
+        # check is accessions have been loaded
+        if not self.acc_read:
+            self.clear_screen()
+            self.print_string('Please load some accessions from the clipboard!')
+            return
+
+        # browse to BLAST map TXT file
+        ext_list = [('Text files', '*.txt')]
+        message = 'Select a BLAST mapping file'
+        blast_map_file = get_file(self.default, ext_list, message)
+        if not blast_map_file: return   # cancel button response
+        
+        # read the mapping file
+        try:
+            blast = pd.read_csv(blast_map_file, sep='\t', skiprows=5)       
+            # drop some columns we do not need
+            if 'match_status' in blast.columns:
+                keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status']
+            else:
+                keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'status']   # older BLAST map files
+            blast = blast.dropna(thresh=4) # this should drop rows after the main table
+            self.blast_brief = blast[keep]
+        except KeyError:
+            blast = pd.read_csv(blast_map_file, sep='\t', skiprows=4)       
+            # drop some columns we do not need
+            if 'match_status' in blast.columns:
+                keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status']
+            else:
+                keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'status']   # older BLAST map files 
+            blast = blast.dropna(thresh=4) # this should drop rows after the main table
+            self.blast_brief = blast[keep]
+        self.blast_read = True
+
+
+        # make the accession mapping dictionary (allow for parsed accessions) 
+        for query, hit in zip(self.blast_brief['query_acc'], self.blast_brief['hit_acc']):
+            self.blast_map[query] = hit
+            if len(query.split('|')) == 3:     # UniProt format
+                   self.blast_map[query.split('|')[1]] = hit
+                   self.blast_map[query.split('|')[2]] = hit
+            if (len(query.split('|')) == 1) and ('.' in query): # NCBI and Ensembl format
+                self.blast_map[query.split('.')[0]] = hit
+            
+            
+        # save some of the BLAST results in a dictionary keyed by query_acc
+        match_count = self.get_blast_matches()
+                
+        # write BLAST results to screen and cliboard
+        self.echo_dataframe(self.blast_table)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.blast_table.to_csv(sep='\t', line_terminator='\r', index=False))
+        self.status.set("%s", "%s BLAST mappings read in (echoed to screen and clipboard)" % match_count)
+        return
+    
+    def get_blast_matches(self):
+        """Gets BLAST info for the loaded accessions."""
+        # save some of the BLAST results in a dictionary keyed by query_acc
+        if not self.blast_read:
+            return 0
+        self.blast_matches = {}
+        row_count = 1
+        for row_tuple in self.blast_brief.iterrows():
+            row = row_tuple[1]
+            acc = row['query_acc']
+            self.blast_matches[row['query_acc']] = [str(x) for x in row]
+            row_count += 1
+            if len(acc.split('|')) == 3:     # UniProt format
+                   self.blast_matches[acc.split('|')[1]] = [str(x) for x in row]
+                   self.blast_matches[acc.split('|')[2]] = [str(x) for x in row]
+            if (len(acc.split('|')) == 1) and ('.' in acc): # NCBI and Ensembl format
+                self.blast_matches[acc.split('.')[0]] = [str(x) for x in row]
+
+        # organize by accession list (if loaded from clipboard)
+        if self.acc_read:
+            keys = list(self.accessions['Accession'])
+        else:
+            keys = self.blast_matches.keys()
+
+        # create a pandas dataframe for the BLAST data
+        rows = []
+        for key in keys:
+            try:
+                rows.append([key] + self.blast_matches[key])
+            except KeyError:
+                rows.append([key, 'NA', 'NA', 'NA', 'NA', 'NA'])
+
+        # make a pandas dataframe
+        self.blast_table = pd.DataFrame(rows, columns = ['Index', 'query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status'])
+
+        return row_count            
+
+    def add_annotations(self):
+        """Prints annotations to the window."""
+        # make sure we have accessions and have parsed a DAT file
+        return_flag = False
+        self.clear_screen()
+        if not self.acc_read:
+            self.print_string('Please load some accessions from the clipboard!')
+            return_flag = True
+        if not self.dat_read:
+            self.print_string('Please parse a DAT file!')
+            return_flag = True
+        if return_flag:
+            self.status.set("%s", "Annotation lookup failed")
+            return
+
+        # lookup the annotations for the accessions
+        self.get_blast_matches()
+        print('after blast map call')
+        self.acc_mapping()
+        print("%s protein annotation records parsed" % len(self.annotations))
+        self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
+
+        # format the annotation table (with or without the BLAST mapping info)
+        if self.blast_read:
+            annot_table = pd.merge(self.blast_table, AnnotationTable(self).table, on='Index')
+        else:
+            annot_table = AnnotationTable(self).table
+
+        # write annotations to screen and clipboard
+        self.echo_dataframe(annot_table)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(annot_table.to_csv(sep='\t', line_terminator='\r', index=False))
+        self.status.set("%s", "Annotations shown above and written to clipboard")
+        print('Annotations added for %s proteins' % len(self.accessions))
+        
     def acc_mapping(self):
-        """acc: a list of accessions
-        db_dict: DAT file object"""
+        """Looks up annotations given loaded accessions."""
         # save annotations in a list (should be matched to self.accessions)
         self.annotations = []
         fail_count = 0
@@ -874,83 +1011,9 @@ class ProteinAnnotator:
                     self.annotations.append(Annotations())
                      
         print('\nDone fetching annotations for %s accessions' % len(self.annotations))
-        print('...%d lookups failed' % fail_count)
+        print('%d lookups failed' % fail_count)
         self.status.set("%s", "%s protein accessions looked up" % len(self.accessions))
-        return self.annotations    
        
-    def blast_mapping(self):
-        """Use Blast ortholog mapping to model organism's DAT file"""
-        # check is accessions have been loaded
-        if not self.acc_read:
-            self.clear_screen()
-            self.print_string('Please load some accessions from the clipboard!')
-            return
-
-        # browse to BLAST map TXT file
-        ext_list = [('Text files', '*.txt')]
-        message = 'Select a BLAST mapping file'
-        blast_map_file = get_file(self.default, ext_list, message)
-        if not blast_map_file: return   # cancel button response
-        
-        # read the mapping file
-        blast = pd.read_csv(blast_map_file, sep='\t', skiprows=5)
-        blast = blast.dropna(thresh=4) # this should drop rows after the main table
-        
-        # drop some columns we do not need
-        if 'match_status' in blast.columns:
-            keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status']
-        else:
-            keep = ['query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'status']   # older BLAST map files
-
-        blast_brief = blast[keep]
-
-        # make the accession mapping dictionary (allow for parsed accessions) 
-        for query, hit in zip(blast_brief['query_acc'], blast_brief['hit_acc']):
-            self.blast_map[query] = hit
-            if len(query.split('|')) == 3:     # UniProt format
-                   self.blast_map[query.split('|')[1]] = hit
-                   self.blast_map[query.split('|')[2]] = hit
-            if (len(query.split('|')) == 1) and ('.' in query): # NCBI and Ensembl format
-                self.blast_map[query.split('.')[0]] = hit
-            
-            
-        # save some of the BLAST results in a dictionary keyed by query_acc
-        blast_matches = {}
-        for row_tuple in blast_brief.iterrows():
-            row = row_tuple[1]
-            acc = row['query_acc']
-            self.blast_matches[row['query_acc']] = [str(x) for x in row]
-            if len(acc.split('|')) == 3:     # UniProt format
-                   self.blast_matches[acc.split('|')[1]] = [str(x) for x in row]
-                   self.blast_matches[acc.split('|')[2]] = [str(x) for x in row]
-            if (len(acc.split('|')) == 1) and ('.' in acc): # NCBI and Ensembl format
-                self.blast_matches[acc.split('.')[0]] = [str(x) for x in row]
-                
-        # organize by accession list (if loaded from clipboard)
-        if self.acc_read:
-            keys = list(self.accessions['Accession'])
-        else:
-            keys = self.blast_matches.keys()
-
-        # create a pandas dataframe for the BLAST data
-        rows = []
-        for key in keys:
-            try:
-                rows.append([key] + self.blast_matches[key])
-            except KeyError:
-                rows.append([key, 'NA', 'NA', 'NA', 'NA', 'NA'])
-
-        # make a pandas dataframe
-        self.blast_table = pd.DataFrame(rows, columns = ['Index', 'query_acc', 'hit_acc', 'hit_desc', 'blast_scores', 'match_status'])
-
-        # write BLAST results to screen and cliboard
-        self.echo_dataframe(self.blast_table)
-        self.root.clipboard_clear()
-        self.root.clipboard_append(self.blast_table.to_csv(sep='\t', line_terminator='\r', index=False))
-        self.status.set("%s", "%s BLAST mappings read in (echoed to screen and clipboard)" % len(self.blast_map))
-        self.blast_read = True
-        return    
-    
     def clear_screen(self):
         """Clears the window."""
         self.text.delete("1.0", END)
@@ -1008,39 +1071,6 @@ Written by Kyra Patton, OHSU, 2016.
     def print_string(self, string):
         self.text.insert(CURRENT, string)
         self.text.insert(CURRENT, '\n')        
-
-    def add_annotations(self):
-        """Prints annotations to the window."""
-        # make sure we have accessions and have parsed a DAT file
-        return_flag = False
-        self.clear_screen()
-        if not self.acc_read:
-            self.print_string('Please load some accessions from the clipboard!')
-            return_flag = True
-        if not self.dat_read:
-            self.print_string('Please parse a DAT file!')
-            return_flag = True
-        if return_flag:
-            self.status.set("%s", "Annotation lookup failed")
-            return
-
-        # lookup the annotations for the accessions
-        self.acc_mapping()
-        print("%s protein annotation records parsed" % len(self.annotations))
-        self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
-
-        # format the annotation table (with or without the BLAST mapping info)
-        if self.blast_read:
-            annot_table = pd.merge(self.blast_table, AnnotationTable(self).table, on='Index')
-        else:
-            annot_table = AnnotationTable(self).table
-
-        # write annotations to screen and clipboard
-        self.echo_dataframe(annot_table)
-        self.root.clipboard_clear()
-        self.root.clipboard_append(annot_table.to_csv(sep='\t', line_terminator='\r', index=False))
-        self.status.set("%s", "Annotations shown above and written to clipboard")
-        print('Annotations added for %s proteins' % len(self.accessions))
         
     def quit_me(self):
         """Quits the application."""
@@ -1059,7 +1089,7 @@ class AnnotationTable:
         self.accessions = self.parent.accessions    # accessions to be annotated
         self.annotations = self.parent.annotations  # annotations from DAT file
         self.reports_folder = None                  # folder to write rports to
-        self.default = self.parent.default          # set a default for dialog boxes
+        self.default = self.parent.default          # set a default location for dialog boxes
         
         self.table = None           # final table for display and export to clipboard
         self.basic_table = None     # table for the general annotations
@@ -1108,8 +1138,7 @@ class AnnotationTable:
                 if type(df_dict[k][-1]) == list:
                     df_dict[k][-1] = '; '.join(df_dict[k][-1]) # use join method
 
-        for k in keys:
-            self.basic_table = pd.DataFrame.from_dict(df_dict)
+        self.basic_table = pd.DataFrame.from_dict(df_dict)
         self.basic_table = self.basic_table[keys]   # put the table columns in the order in keys
         self.basic_table['UniProt Link'] = self.basic_table['Accession'].apply(self.add_uniprot_hyperlinks)
         if self.parent.kw_var.get() == 1:
@@ -1322,10 +1351,10 @@ class AnnotationTable:
     def concatenate(self):
         """Merges all the annotation tables together."""
         # drop any unwanted columns before concatenating
-        self.basic_table = self.basic_table.drop('Key Words', axis=1)    
+        self.basic_table = self.basic_table.drop('Key Words', axis=1)
         frames = [self.basic_table, self.mgi_table, self.kw_table, self.go_table, self.pw_table]
         self.table = pd.concat(frames, axis=1)
-        self.table = self.table.set_index('Index')
+#        self.table = self.table.set_index('Index')
         return
 
 # MAIN program starts here
