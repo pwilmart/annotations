@@ -4,11 +4,13 @@ GUI Python script that adds rich UniProt annotations to proteomics results files
 
 ---
 
-## Bug Fixes!!! (20191017)
+## Bug Fixes!!! (20191018)
 
 ### Had some issues with both `add_uniprot_annotations.py` and `keywlist_download.py`
 
-Apologies to all. I need to get more disciplined about testing. A few of my attempts to catch errors had errors.
+Apologies to all. I need to get more disciplined about testing. A few of my attempts to catch errors had errors. I am 99% sure most major things are working correctly. GUI applications are non-linear by nature and a bit harder to test and debug.
+
+> If you encounter any issues, check to see if there is a newer version (check the commit dates). I tend to fix bugs as I encounter them and then update the repository. I do not have a formal release schedule for miscellaneous tools like these. If you still have any issues, you can email me ("wilmarth AT ohsu.edu" or "pwilmart AT me.com") or open an issue in the repository.
 
 ---
 
@@ -17,7 +19,7 @@ Written by **Kyra Patton**, OHSU summer research project, 2016
 > The program requires a 3.X version of Python which can be obtained from www.python.org or from a scientific python distribution like [Anaconda](https://www.anaconda.com/distribution/). If you do the standard Python distribution, you will need to install [scientific Python extensions](https://scipy.org/install.html).
 
 - keywlist_download.py - downloader script for key word list and DAT files
-- add_uniprot_annotations.py - GUI script for adding annotations to results 
+- add_uniprot_annotations.py - GUI script for adding annotations to results
 
 ## UniProt annotations
 
