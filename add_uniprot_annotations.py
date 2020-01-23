@@ -728,6 +728,8 @@ class ProteinAnnotator:
         acc = []
         for line in clipboard:
             line = line.strip().split()[0]
+            if ';' in line:
+                line = line.split(';')[0]
             if not line or line.upper() in headers:
                 continue
             if line.endswith('_family'):
@@ -966,7 +968,6 @@ class ProteinAnnotator:
 
         # lookup the annotations for the accessions
         self.get_blast_matches()
-        print('after blast map call')
         self.acc_mapping()
         print("%s protein annotation records parsed" % len(self.annotations))
         self.status.set("%s", "%s protein annotation records parsed" % len(self.annotations))
